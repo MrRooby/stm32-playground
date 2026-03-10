@@ -21,6 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stdio.h"
+#include "string.h"
 
 /* USER CODE END Includes */
 
@@ -31,7 +33,27 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+const uint16_t LED_PINS[8] = {
+  ROW8_Pin,
+  ROW7_Pin,
+  ROW6_Pin,
+  ROW5_Pin,
+  ROW4_Pin,
+  ROW3_Pin,
+  ROW2_Pin,
+  ROW1_Pin,
+};
 
+const GPIO_TypeDef* LED_PORT[8] = {
+  ROW8_GPIO_Port,
+  ROW7_GPIO_Port,
+  ROW6_GPIO_Port,
+  ROW5_GPIO_Port,
+  ROW4_GPIO_Port,
+  ROW3_GPIO_Port,
+  ROW2_GPIO_Port,
+  ROW1_GPIO_Port,
+};
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -40,16 +62,21 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+uint8_t rx_byte;
+uint8_t rx_buf[6];
+uint16_t rx_idx = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+static inline uint8_t map(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max);
+void tempGauge(const uint8_t temp);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -81,27 +108,33 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  uint8_t cycle = 0;
+  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+
+  HAL_GPIO_WritePin(COL1_GPIO_Port, COL1_Pin, 1);
+  HAL_GPIO_WritePin(COL2_GPIO_Port, COL2_Pin, 1);
+  HAL_GPIO_WritePin(COL3_GPIO_Port, COL3_Pin, 1);
+
+  HAL_GPIO_WritePin(ROW1_GPIO_Port, ROW1_Pin, 1);
+  HAL_GPIO_WritePin(ROW2_GPIO_Port, ROW2_Pin, 1);
+  HAL_GPIO_WritePin(ROW3_GPIO_Port, ROW3_Pin, 1);
+  HAL_GPIO_WritePin(ROW4_GPIO_Port, ROW4_Pin, 1);
+  HAL_GPIO_WritePin(ROW5_GPIO_Port, ROW5_Pin, 1);
+  HAL_GPIO_WritePin(ROW6_GPIO_Port, ROW6_Pin, 1);
+  HAL_GPIO_WritePin(ROW7_GPIO_Port, ROW7_Pin, 1);
+  HAL_GPIO_WritePin(ROW8_GPIO_Port, ROW8_Pin, 1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  for (uint8_t i = 0; i < 16; ++i) {
-		  HAL_GPIO_WritePin(S0_GPIO_Port, S0_Pin, i & 0x01);
-		  HAL_GPIO_WritePin(S1_GPIO_Port, S1_Pin, (i >> 1) & 0x01);
-		  HAL_GPIO_WritePin(S2_GPIO_Port, S2_Pin, (i >> 2) & 0x01);
-		  HAL_GPIO_WritePin(S3_GPIO_Port, S3_Pin, (i >> 3) & 0x01);
-
-		  HAL_Delay(10);
-	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -156,6 +189,39 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -174,13 +240,15 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, S0_Pin|S1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, COL3_Pin|COL2_Pin|ROW1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, S3_Pin|LD2_Pin|GPIO_PIN_6, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin|GPIO_PIN_6|ROW3_Pin|ROW2_Pin
+                          |ROW8_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(S2_GPIO_Port, S2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, COL1_Pin|ROW4_Pin|ROW7_Pin|ROW5_Pin
+                          |ROW6_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -188,34 +256,30 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : S0_Pin S1_Pin */
-  GPIO_InitStruct.Pin = S0_Pin|S1_Pin;
+  /*Configure GPIO pins : COL3_Pin COL2_Pin ROW1_Pin */
+  GPIO_InitStruct.Pin = COL3_Pin|COL2_Pin|ROW1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : USART_TX_Pin USART_RX_Pin */
-  GPIO_InitStruct.Pin = USART_TX_Pin|USART_RX_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : S3_Pin LD2_Pin PA6 */
-  GPIO_InitStruct.Pin = S3_Pin|LD2_Pin|GPIO_PIN_6;
+  /*Configure GPIO pins : LD2_Pin PA6 ROW3_Pin ROW2_Pin
+                           ROW8_Pin */
+  GPIO_InitStruct.Pin = LD2_Pin|GPIO_PIN_6|ROW3_Pin|ROW2_Pin
+                          |ROW8_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : S2_Pin */
-  GPIO_InitStruct.Pin = S2_Pin;
+  /*Configure GPIO pins : COL1_Pin ROW4_Pin ROW7_Pin ROW5_Pin
+                           ROW6_Pin */
+  GPIO_InitStruct.Pin = COL1_Pin|ROW4_Pin|ROW7_Pin|ROW5_Pin
+                          |ROW6_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(S2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -223,7 +287,38 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART2 && rx_byte >= 0x00)
+  {
+    char tx_buf[10];
+    int len = snprintf(tx_buf, sizeof(tx_buf), "ACL: %d\r\n", rx_byte);
+    tempGauge(rx_byte);
+    HAL_UART_Transmit(&huart2, (uint8_t *)tx_buf, len, HAL_MAX_DELAY);
 
+    // Re-arm for next byte
+    HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+  }
+}
+
+void tempGauge(const uint8_t temp){
+  HAL_GPIO_WritePin(COL1_GPIO_Port, COL1_Pin, 1);
+  HAL_GPIO_WritePin(COL2_GPIO_Port, COL2_Pin, 1);
+  HAL_GPIO_WritePin(COL3_GPIO_Port, COL3_Pin, 1);
+  uint8_t level = map(temp, 25, 95, 0, 8);
+  for(uint8_t i = 0; i < 8; i++){
+	  if(i < level){
+		  HAL_GPIO_WritePin(LED_PORT[i], LED_PINS[i], 0);
+	  }
+	  else{
+		  HAL_GPIO_WritePin(LED_PORT[i], LED_PINS[i], 1);
+	  }
+  }
+}
+
+static inline uint8_t map(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max){
+	return(value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 /* USER CODE END 4 */
 
 /**
