@@ -21,19 +21,29 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdio.h"
-#include "string.h"
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-const uint16_t LED_PINS[8] = {
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+UART_HandleTypeDef huart2;
+
+/* USER CODE BEGIN PV */
+uint8_t rx_byte;
+uint8_t rx_buf[6];
+uint16_t rx_idx = 0;
+
+const uint16_t ROW_PIN[8] = {
   ROW8_Pin,
   ROW7_Pin,
   ROW6_Pin,
@@ -44,7 +54,7 @@ const uint16_t LED_PINS[8] = {
   ROW1_Pin,
 };
 
-const GPIO_TypeDef* LED_PORT[8] = {
+const GPIO_TypeDef* ROW_PORT[8] = {
   ROW8_GPIO_Port,
   ROW7_GPIO_Port,
   ROW6_GPIO_Port,
@@ -54,20 +64,18 @@ const GPIO_TypeDef* LED_PORT[8] = {
   ROW2_GPIO_Port,
   ROW1_GPIO_Port,
 };
-/* USER CODE END PD */
 
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
+const uint16_t COL_PIN[3] = {
+  COL1_Pin,
+  COL2_Pin,
+  COL3_Pin,
+};
 
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-UART_HandleTypeDef huart2;
-
-/* USER CODE BEGIN PV */
-uint8_t rx_byte;
-uint8_t rx_buf[6];
-uint16_t rx_idx = 0;
+const GPIO_TypeDef* COL_PORT[3] = {
+  COL1_GPIO_Port,
+  COL2_GPIO_Port,
+  COL3_GPIO_Port,
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -76,7 +84,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static inline uint8_t map(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max);
-void tempGauge(const uint8_t temp);
+void gauge(const uint8_t val, const uint8_t col, const uint8_t level_min,  const uint8_t level_max);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -293,7 +301,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   {
     char tx_buf[10];
     int len = snprintf(tx_buf, sizeof(tx_buf), "ACL: %d\r\n", rx_byte);
-    tempGauge(rx_byte);
+    gauge(rx_byte, 0, 30, 97);
     HAL_UART_Transmit(&huart2, (uint8_t *)tx_buf, len, HAL_MAX_DELAY);
 
     // Re-arm for next byte
@@ -301,17 +309,21 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   }
 }
 
-void tempGauge(const uint8_t temp){
-  HAL_GPIO_WritePin(COL1_GPIO_Port, COL1_Pin, 1);
-  HAL_GPIO_WritePin(COL2_GPIO_Port, COL2_Pin, 1);
-  HAL_GPIO_WritePin(COL3_GPIO_Port, COL3_Pin, 1);
-  uint8_t level = map(temp, 25, 95, 0, 8);
+void gauge(const uint8_t val, const uint8_t col, const uint8_t level_min,  const uint8_t level_max){
+  // for (uint8_t i = 0; i < 3; i++) {
+  //   HAL_GPIO_WritePin(COL_PORT[i], COL_PIN[i], (i == col) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  // }
+  HAL_GPIO_WritePin(COL_PORT[0], ROW_PIN[0], 1);
+  HAL_GPIO_WritePin(COL_PORT[0], ROW_PIN[0], 1);
+  HAL_GPIO_WritePin(COL_PORT[0], ROW_PIN[0], 1);
+
+  uint8_t level = map(val, level_min, level_max, 0, 8);
   for(uint8_t i = 0; i < 8; i++){
 	  if(i < level){
-		  HAL_GPIO_WritePin(LED_PORT[i], LED_PINS[i], 0);
+		  HAL_GPIO_WritePin(ROW_PORT[i], ROW_PIN[i], 0);
 	  }
 	  else{
-		  HAL_GPIO_WritePin(LED_PORT[i], LED_PINS[i], 1);
+		  HAL_GPIO_WritePin(ROW_PORT[i], ROW_PIN[i], 1);
 	  }
   }
 }

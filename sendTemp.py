@@ -1,10 +1,21 @@
 import serial
-import datetime
-import time
 import psutil
 import struct
 
-ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+def open_serial_port(possible_ports, baud=115200, timeout=1):
+    for port in possible_ports:
+        ser = serial.Serial(port, baudrate=baud, timeout=timeout)
+        print(f"Connected to {port}")
+        return ser
+    print("Error!! No ports available")
+    return None
+
+ports = [
+    '/dev/ttyACM1',
+    '/dev/ttyACM0',
+]
+
+ser = open_serial_port(ports, 115200)
 
 while True:
     temp = psutil.sensors_temperatures()
@@ -13,5 +24,3 @@ while True:
     tx = bytes([int(cpu_temp)])
     ser.write(tx)
     print(tx.hex(' '))
-    
-
