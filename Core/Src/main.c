@@ -36,11 +36,13 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim3;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 uint8_t rx_byte;
-uint8_t rx_buf[6];
+uint8_t rx_buff[4] = {0x00, 0x00, 0x00, 0xFF};
 uint16_t rx_idx = 0;
 
 const uint16_t ROW_PIN[8] = {
@@ -76,15 +78,26 @@ const GPIO_TypeDef* COL_PORT[3] = {
   COL2_GPIO_Port,
   COL3_GPIO_Port,
 };
+
+volatile uint8_t current_row = 0;
+
+uint8_t frame_buff[3] = {
+		0x00,
+		0x00,
+		0x00
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 static inline uint8_t map(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max);
+static inline uint8_t map_byte(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max);
 void gauge(const uint8_t val, const uint8_t col, const uint8_t level_min,  const uint8_t level_max);
+void matrix_display(const uint8_t setup[8][3]);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -121,8 +134,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+  HAL_TIM_Base_Start_IT(&htim3);
 
   HAL_GPIO_WritePin(COL1_GPIO_Port, COL1_Pin, 1);
   HAL_GPIO_WritePin(COL2_GPIO_Port, COL2_Pin, 1);
@@ -136,6 +151,7 @@ int main(void)
   HAL_GPIO_WritePin(ROW6_GPIO_Port, ROW6_Pin, 1);
   HAL_GPIO_WritePin(ROW7_GPIO_Port, ROW7_Pin, 1);
   HAL_GPIO_WritePin(ROW8_GPIO_Port, ROW8_Pin, 1);
+
 
   /* USER CODE END 2 */
 
@@ -194,6 +210,51 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 65535;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
 }
 
 /**
@@ -300,8 +361,23 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   if (huart->Instance == USART2 && rx_byte >= 0x00)
   {
     char tx_buf[10];
-    int len = snprintf(tx_buf, sizeof(tx_buf), "ACL: %d\r\n", rx_byte);
-    gauge(rx_byte, 0, 30, 97);
+    int len = 0x00;
+    if(rx_byte != 0xFF){
+    	len = snprintf(tx_buf, sizeof(tx_buf), "ACK: %d\r\n", rx_byte);
+    } else {
+    	len = snprintf(tx_buf, sizeof(tx_buf), "END ACK\r\n");
+    }
+    		 //    gauge(rx_byte, 0, 30, 97);
+    rx_buff[0] = rx_buff[1];
+    rx_buff[1] = rx_buff[2];
+    rx_buff[2] = rx_buff[3];
+    rx_buff[3] = rx_byte;
+
+    if(rx_buff[3] == 0xFF){
+    	frame_buff[0] = map_byte(rx_buff[0], 30, 97, 1, 8);
+    	frame_buff[1] = map_byte(rx_buff[1], 0, 100, 1, 8);
+    	frame_buff[2] = map_byte(rx_buff[2], 0, 100, 1, 8);
+    }
     HAL_UART_Transmit(&huart2, (uint8_t *)tx_buf, len, HAL_MAX_DELAY);
 
     // Re-arm for next byte
@@ -309,10 +385,20 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   }
 }
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	if (htim->Instance == TIM3) {
+		HAL_GPIO_WritePin(ROW_PORT[current_row], ROW_PIN[current_row], 1);
+		current_row = (current_row + 1) % 8;
+
+		for(int col = 0; col < 3; col++){
+			uint8_t curr_buff = frame_buff[col] >> current_row & 1;
+			HAL_GPIO_WritePin(COL_PORT[col], COL_PIN[col], curr_buff);
+		}
+	    HAL_GPIO_WritePin(ROW_PORT[current_row], ROW_PIN[current_row], 0);
+	}
+}
+
 void gauge(const uint8_t val, const uint8_t col, const uint8_t level_min,  const uint8_t level_max){
-  // for (uint8_t i = 0; i < 3; i++) {
-  //   HAL_GPIO_WritePin(COL_PORT[i], COL_PIN[i], (i == col) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-  // }
   HAL_GPIO_WritePin(COL_PORT[0], ROW_PIN[0], 1);
   HAL_GPIO_WritePin(COL_PORT[0], ROW_PIN[0], 1);
   HAL_GPIO_WritePin(COL_PORT[0], ROW_PIN[0], 1);
@@ -329,7 +415,11 @@ void gauge(const uint8_t val, const uint8_t col, const uint8_t level_min,  const
 }
 
 static inline uint8_t map(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max){
-	return(value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+	return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+static inline uint8_t map_byte(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max){
+	return (1 << map(value, in_min, in_max, out_min, out_max)) - 1;
 }
 /* USER CODE END 4 */
 
