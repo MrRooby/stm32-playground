@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -30,8 +31,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define LED_NUM 5
+#define LED_NUM 64
 #define PWM_DATA_SIZE 24*LED_NUM+50
+#define RED 0
+#define GREEN 1
+#define BLUE 2
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -97,6 +101,18 @@ uint16_t pwm_data[PWM_DATA_SIZE];
 uint8_t LED_Data[LED_NUM][3];
 
 uint8_t led_data_sent = 0;
+
+uint8_t matrix[8] = {
+	  0b00011000,
+	  0b00100100,
+	  0b00100100,
+	  0b00100100,
+	  0b00100100,
+	  0b01100110,
+	  0b10011001,
+	  0b01100110,
+};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -112,7 +128,8 @@ static inline uint8_t map_byte(uint8_t value, uint8_t in_min, uint8_t in_max, ui
 void gauge(const uint8_t val, const uint8_t col, const uint8_t level_min,  const uint8_t level_max);
 void matrix_display(const uint8_t setup[8][3]);
 void send_ws();
-void set_led(const uint8_t led_index, const uint8_t r, const uint8_t g, const uint8_t b);
+void set_led(const uint8_t led_index, const uint8_t r, const uint8_t g, const uint8_t b, const uint8_t brightness);
+void set_led_matrix64(const uint8_t data[8], const uint32_t colorHEX, const uint8_t brightness);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -169,19 +186,35 @@ int main(void)
   HAL_GPIO_WritePin(ROW7_GPIO_Port, ROW7_Pin, 1);
   HAL_GPIO_WritePin(ROW8_GPIO_Port, ROW8_Pin, 1);
 
-  set_led(0, 0xFF, 0, 0);
-  set_led(1, 0, 0xFF, 0);
-  set_led(2, 0, 0, 0xFF);
-  set_led(3, 0, 0xFF, 0);
-  set_led(4, 0xFF, 0, 0);
-  send_ws();
+//  set_led_matrix64(matrix, 0xff1493, 10);
+
+//  send_ws();
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  uint8_t buffer[16];
+
+  memcpy(buffer, matrix, 8);
+
+  memset(buffer + 8, 0x00, 8);
+
+  int step = 0;
   while (1)
   {
+	    for (int i = 0; i < 8; i++) {
+	        matrix[i] = buffer[(step + i) % 16];
+	    }
+
+	    set_led_matrix64(matrix, 0xff1493, 10);
+	    send_ws();
+	    HAL_Delay(200);
+
+	    step++;
+	    if (step >= 16) step = 0;
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -549,10 +582,22 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
 	led_data_sent = 1;
 }
 
-void set_led(const uint8_t led_index, const uint8_t r, const uint8_t g, const uint8_t b){
-	LED_Data[led_index][0] = r;
-	LED_Data[led_index][1] = g;
-	LED_Data[led_index][2] = b;
+void set_led(const uint8_t led_index, const uint8_t r, const uint8_t g, const uint8_t b, const uint8_t brightness){
+	float mul = (float)brightness / 255.0f;
+	LED_Data[led_index][0] = r*mul;
+	LED_Data[led_index][1] = g*mul;
+	LED_Data[led_index][2] = b*mul;
+}
+
+void set_led_matrix64(const uint8_t rows[8], const uint32_t colorHEX, const uint8_t brightness){
+	for (int i = 0; i < 64; ++i) {
+		if((rows[i/8] >> i%8 & 1) == 1){
+			set_led(i, (uint8_t)(colorHEX >> 16), (uint8_t)(colorHEX >> 8), (uint8_t)(colorHEX), brightness);
+		}
+		else {
+			set_led(i, 0, 0, 0, 0);
+		}
+	}
 }
 
 /* USER CODE END 4 */
