@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -29,6 +30,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define LED_NUM 5
+#define PWM_DATA_SIZE 24*LED_NUM+50
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -37,6 +40,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
+DMA_HandleTypeDef hdma_tim4_ch1;
 
 UART_HandleTypeDef huart2;
 
@@ -86,18 +91,28 @@ uint8_t frame_buff[3] = {
 		0x00,
 		0x00
 };
+
+uint16_t pwm_data[PWM_DATA_SIZE];
+
+uint8_t LED_Data[LED_NUM][3];
+
+uint8_t led_data_sent = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 static inline uint8_t map(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max);
 static inline uint8_t map_byte(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max);
 void gauge(const uint8_t val, const uint8_t col, const uint8_t level_min,  const uint8_t level_max);
 void matrix_display(const uint8_t setup[8][3]);
+void send_ws();
+void set_led(const uint8_t led_index, const uint8_t r, const uint8_t g, const uint8_t b);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -133,8 +148,10 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_TIM3_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   HAL_TIM_Base_Start_IT(&htim3);
@@ -152,6 +169,12 @@ int main(void)
   HAL_GPIO_WritePin(ROW7_GPIO_Port, ROW7_Pin, 1);
   HAL_GPIO_WritePin(ROW8_GPIO_Port, ROW8_Pin, 1);
 
+  set_led(0, 0xFF, 0, 0);
+  set_led(1, 0, 0xFF, 0);
+  set_led(2, 0, 0, 0xFF);
+  set_led(3, 0, 0xFF, 0);
+  set_led(4, 0xFF, 0, 0);
+  send_ws();
 
   /* USER CODE END 2 */
 
@@ -258,6 +281,65 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 0;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 105-1;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+  HAL_TIM_MspPostInit(&htim4);
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -287,6 +369,22 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
 
 }
 
@@ -421,6 +519,42 @@ static inline uint8_t map(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t
 static inline uint8_t map_byte(uint8_t value, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max){
 	return (1 << map(value, in_min, in_max, out_min, out_max)) - 1;
 }
+
+void send_ws(){
+	uint32_t idx = 0;
+	uint32_t data;
+
+	for (int i = 0; i < LED_NUM; i++) {
+		data = (LED_Data[i][1] << 16) | (LED_Data[i][0] << 8) | LED_Data[i][2];
+
+		for (int n = 23; n >= 0; n--) {
+			if(data & (1 << n)) pwm_data[idx] = 71; // 2/3 105
+			else pwm_data[idx] = 34; // 1/3 105
+			idx++;
+		}
+	}
+
+	for (int p = 0; p < 50; p++) {
+		pwm_data[idx] = 0;
+		idx++;
+	}
+
+	HAL_TIM_PWM_Start_DMA(&htim4, TIM_CHANNEL_1, (uint32_t *)pwm_data, PWM_DATA_SIZE);
+	while(!led_data_sent) {};
+	led_data_sent = 0;
+}
+
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim){
+	HAL_TIM_PWM_Stop_DMA(&htim4, TIM_CHANNEL_1);
+	led_data_sent = 1;
+}
+
+void set_led(const uint8_t led_index, const uint8_t r, const uint8_t g, const uint8_t b){
+	LED_Data[led_index][0] = r;
+	LED_Data[led_index][1] = g;
+	LED_Data[led_index][2] = b;
+}
+
 /* USER CODE END 4 */
 
 /**
